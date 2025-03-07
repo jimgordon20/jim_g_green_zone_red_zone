@@ -111,12 +111,17 @@ AddEventHandler('Jim_G_Green_Red_Zone:SyncZones', function(zoneData, customImage
     if DebugMode then
         Bridge.Notify.SendNotify("Zones are up and running!", "info", 5000)
     end
+
     for name, zone in pairs(ActiveZones) do
-        zone:remove()
+        if not Zones[name] or not Zones[name].enabled then
+            zone:remove()
+            ActiveZones[name] = nil
+            debug("Removed stale zone: " .. name)
+        end
     end
-    ActiveZones = {}
+
     for name, data in pairs(Zones) do
-        if data.enabled then
+        if data.enabled and not ActiveZones[name] then
             ActiveZones[name] = lib.zones.poly({
                 points = data.points,
                 thickness = data.thickness,
@@ -130,8 +135,6 @@ AddEventHandler('Jim_G_Green_Red_Zone:SyncZones', function(zoneData, customImage
                     applyRules(data.type, false)
                 end
             })
-        else
-            debug("Skipped " .. name .. " (disabled)")
         end
     end
 end)
