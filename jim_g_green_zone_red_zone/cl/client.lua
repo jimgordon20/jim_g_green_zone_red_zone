@@ -36,6 +36,7 @@ local function applyRules(zoneType, entering)
     local ped = PlayerPedId()
     local vehicle = GetVehiclePedIsIn(ped, false)
     local job = Bridge.Framework.GetPlayerJob(PlayerId())[1]
+    local playerId = PlayerId()
 
     if zoneType == "Greenzone" then
         local restrictions = Zones[zoneType].restrictions or {}
