@@ -16,17 +16,19 @@ end
 -- Show or hide
 local function updateUI(zoneType)
     if not UseCustomImage then return end
+    local msg = {}
     if zoneType == "Greenzone" and Config.GreenzoneImageURL then
-        SendNUIMessage({ action = "show", image = Config.GreenzoneImageURL, debug = DebugMode })
+        msg = { action = "show", image = Config.GreenzoneImageURL }
         debug("Showing Greenzone image")
     elseif zoneType == "Redzone" and Config.RedzoneImageURL then
-        SendNUIMessage({ action = "show", image = Config.RedzoneImageURL, debug = DebugMode })
+        msg = { action = "show", image = Config.RedzoneImageURL }
         debug("Showing Redzone image")
     else
-        SendNUIMessage({ action = "hide", debug = DebugMode })
+        msg = { action = "hide" }
         debug("Hiding zone image")
     end
-    SendNUIMessage({ action = "setPosition", x = UIPosition.x, y = UIPosition.y, debug = DebugMode })
+    SendNUIMessage(msg)
+    SendNUIMessage({ action = "setPosition", x = UIPosition.x, y = UIPosition.y })
 end
 
 -- Handle zone rules
