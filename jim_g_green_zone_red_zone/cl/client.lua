@@ -13,16 +13,6 @@ local function debug(msg)
     end
 end
 
-
---Citizen.CreateThread(function()
---    if not lib then
---        Bridge.Prints.Error("ox_lib isn’t loaded, zones won’t work!")
---        Bridge.Notify.SendNotify("Zone system failed: ox_lib missing!", "error", 10000)
---        return
---    end
---    print("^2ox_lib is good!^7")
---end)
-
 -- Show or hide
 local function updateUI(zoneType)
     if not UseCustomImage then return end
