@@ -5,7 +5,9 @@ local DebugMode = false
 local ActiveZones = {}
 local UIPosition = { x = "20px", y = "20%" }
 local lastDebug = 0
+local inGreenzone = false
 
+-- Throttled debug print
 local function debug(msg)
     if DebugMode and GetGameTimer() - lastDebug > 1000 then
         Bridge.Prints.Debug(msg)
@@ -13,6 +15,7 @@ local function debug(msg)
     end
 end
 
+-- Update UI for zones
 local function updateUI(zoneType)
     if not UseCustomImage then return end
     local msg = {}
@@ -40,6 +43,7 @@ local function applyRules(zoneType, entering)
         local exempt = restrictions.jobExceptions and restrictions.jobExceptions[job]
 
         if entering then
+            inGreenzone = true  -- Mark player as in Greenzone
             if not restrictions.allowGuns and not exempt and cache.weapon then
                 SetCurrentPedWeapon(ped, `WEAPON_UNARMED`, true)
                 debug("Disarmed in Greenzone")
@@ -54,6 +58,7 @@ local function applyRules(zoneType, entering)
             if UseCustomImage then updateUI("Greenzone")
             else Bridge.Notify.SendNotify(Zones[zoneType].enterMessage or "In Greenzone!", "success", 5000) end
         else
+            inGreenzone = false  -- Clear Greenzone flag
             if not restrictions.allowGuns and not exempt and cache.weapon then
                 SetCurrentPedWeapon(ped, cache.weapon, true)
                 debug("Re-armed leaving Greenzone")
@@ -70,8 +75,9 @@ local function applyRules(zoneType, entering)
         end
     elseif zoneType == "Redzone" then
         if entering then
+            inGreenzone = false  -- Ensure Greenzone flag is off
             if cache.weapon then
-                SetCurrentPedWeapon(ped, cache.weapon, true)
+                SetCurrentPedWeapon(ped, cache.weapon, true)  -- Ensure weapon is usable
             end
             SetEntityInvincible(ped, false)
             if cache.vehicle then
@@ -81,6 +87,7 @@ local function applyRules(zoneType, entering)
             if UseCustomImage then updateUI("Redzone")
             else Bridge.Notify.SendNotify(Zones[zoneType].enterMessage or "In Redzone!", "error", 5000) end
         else
+            inGreenzone = false  -- Ensure Greenzone flag is off
             debug("Redzone rules off")
             if UseCustomImage then updateUI(nil)
             else Bridge.Notify.SendNotify(Zones[zoneType].exitMessage or "Out of Redzone!", "info", 5000) end
@@ -88,9 +95,8 @@ local function applyRules(zoneType, entering)
     end
 end
 
--- Sync zones from server
-RegisterNetEvent('Jim_G_Green_Red_Zone:SyncZones')
-AddEventHandler('Jim_G_Green_Red_Zone:SyncZones', function(zoneData, customImage, debugOn, uiPos)
+-- Sync zones
+RegisterNetEvent('Jim_G_Green_Red_Zone:SyncZones', function(zoneData, customImage, debugOn, uiPos)
     Zones = zoneData
     UseCustomImage = customImage
     DebugMode = debugOn
@@ -103,7 +109,6 @@ AddEventHandler('Jim_G_Green_Red_Zone:SyncZones', function(zoneData, customImage
     if DebugMode then
         Bridge.Notify.SendNotify("Zones are up and running!", "info", 5000)
     end
-
     for name, zone in pairs(ActiveZones) do
         if not Zones[name] or not Zones[name].enabled then
             zone:remove()
@@ -111,7 +116,6 @@ AddEventHandler('Jim_G_Green_Red_Zone:SyncZones', function(zoneData, customImage
             debug("Removed zone: " .. name)
         end
     end
-
     for name, data in pairs(Zones) do
         if data.enabled and not ActiveZones[name] then
             ActiveZones[name] = lib.zones.poly({
@@ -132,14 +136,13 @@ AddEventHandler('Jim_G_Green_Red_Zone:SyncZones', function(zoneData, customImage
 end)
 
 
-RegisterNetEvent('community_bridge:Client:OnPlayerLoaded')
-AddEventHandler('community_bridge:Client:OnPlayerLoaded', function()
+RegisterNetEvent('community_bridge:Client:OnPlayerLoaded', function()
     TriggerServerEvent('community_bridge:Server:OnPlayerLoaded', GetPlayerServerId(PlayerId()))
 end)
 
 
 lib.onCache('vehicle', function(value, oldValue)
-    if not value and oldValue then
+    if not value and oldValue then  -- Left a vehicle
         debug("Left vehicle, resetting speed")
         SetVehicleMaxSpeed(oldValue, 0.0)
     end
@@ -147,9 +150,14 @@ end)
 
 
 lib.onCache('weapon', function(value, oldValue)
-    if Zones["Greenzone"] and Zones["Greenzone"].restrictions and not Zones["Greenzone"].restrictions.allowGuns then
-        local ped = cache.ped or PlayerPedId()
-        SetCurrentPedWeapon(ped, `WEAPON_UNARMED`, true)
-        debug("Forced unarmed in Greenzone")
+    if inGreenzone and Zones["Greenzone"] then
+        local restrictions = Zones["Greenzone"].restrictions or {}
+        local job = Bridge.Framework.GetPlayerJob(cache.player or PlayerId())[1]
+        local exempt = restrictions.jobExceptions and restrictions.jobExceptions[job]
+        if not restrictions.allowGuns and not exempt and value then
+            local ped = cache.ped or PlayerPedId()
+            SetCurrentPedWeapon(ped, `WEAPON_UNARMED`, true)
+            debug("Forced unarmed in Greenzone")
+        end
     end
 end)
