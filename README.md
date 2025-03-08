@@ -1,5 +1,5 @@
 ![jim_g_red_v_green](https://github.com/user-attachments/assets/4eed71ad-f79a-4d24-82a4-bba489dacbe9)
-
+![Downloads](https://img.shields.io/github/downloads/jimgordon20/jim_g_green_zone_red_zone/total.svg)
 
 #Jim_G_Green_Zone_Red_Zone
 
