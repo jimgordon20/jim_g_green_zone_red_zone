@@ -14,14 +14,12 @@ local function syncZones(player)
 end
 
 -- Player joins
-RegisterNetEvent('community_bridge:Server:OnPlayerLoaded')
-AddEventHandler('community_bridge:Server:OnPlayerLoaded', function(src)
+RegisterNetEvent('community_bridge:Server:OnPlayerLoaded', function(src)
     syncZones(src)
 end)
 
 -- Player leaves
-RegisterNetEvent('community_bridge:Server:OnPlayerUnload')
-AddEventHandler('community_bridge:Server:OnPlayerUnload', function(src)
+RegisterNetEvent('community_bridge:Server:OnPlayerUnload', function(src)
     if Config.Debug then
         Bridge.Prints.Debug("Player " .. src .. " dropped from zone system")
     end
