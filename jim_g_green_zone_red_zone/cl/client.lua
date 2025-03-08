@@ -18,17 +18,9 @@ end
 -- Update UI for zones
 local function updateUI(zoneType)
     if not UseCustomImage then return end
-    local msg = {}
-    if zoneType == "Greenzone" and Config.GreenzoneImageURL then
-        msg = { action = "show", image = Config.GreenzoneImageURL }
-        debug("Showing Greenzone image")
-    elseif zoneType == "Redzone" and Config.RedzoneImageURL then
-        msg = { action = "show", image = Config.RedzoneImageURL }
-        debug("Showing Redzone image")
-    else
-        msg = { action = "hide" }
-        debug("Hiding zone image")
-    end
+    local msg = zoneType == "Greenzone" and Config.GreenzoneImageURL and { action = "show", image = Config.GreenzoneImageURL }
+             or zoneType == "Redzone" and Config.RedzoneImageURL and { action = "show", image = Config.RedzoneImageURL }
+             or { action = "hide" }
     SendNUIMessage(msg)
     SendNUIMessage({ action = "setPosition", x = UIPosition.x, y = UIPosition.y })
 end
@@ -36,58 +28,37 @@ end
 -- Apply zone rules
 local function applyRules(zoneType, entering)
     local ped = cache.ped or PlayerPedId()
-    local job = Bridge.Framework.GetPlayerJob(cache.player or PlayerId())[1]
+    local jobData = Bridge.Framework.GetPlayerJob(cache.player or PlayerId())
+    local job = type(jobData) == "string" and jobData or (jobData and (jobData[1] or jobData.name or jobData.job)) or "unknown"
 
     if zoneType == "Greenzone" then
         local restrictions = Zones[zoneType].restrictions or {}
-        local exempt = restrictions.jobExceptions and restrictions.jobExceptions[job]
+        local exempt = restrictions.jobExceptions and job and restrictions.jobExceptions[job]
 
-        if entering then
-            inGreenzone = true  -- Mark player as in Greenzone
-            if not restrictions.allowGuns and not exempt and cache.weapon then
-                SetCurrentPedWeapon(ped, `WEAPON_UNARMED`, true)
-                debug("Disarmed in Greenzone")
-            end
-            if restrictions.allowGodMode and not restrictions.allowDeath then
-                SetEntityInvincible(ped, true)
-            end
-            if cache.vehicle then
-                SetVehicleMaxSpeed(cache.vehicle, Zones[zoneType].maxSpeed or 0.0)
-            end
-            debug("Greenzone rules on")
-            if UseCustomImage then updateUI("Greenzone")
-            else Bridge.Notify.SendNotify(Zones[zoneType].enterMessage or "In Greenzone!", "success", 5000) end
-        else
-            inGreenzone = false  -- Clear Greenzone flag
-            if not restrictions.allowGuns and not exempt and cache.weapon then
-                SetCurrentPedWeapon(ped, cache.weapon, true)
-                debug("Re-armed leaving Greenzone")
-            end
-            if restrictions.allowGodMode and not restrictions.allowDeath then
-                SetEntityInvincible(ped, false)
-            end
-            if cache.vehicle then
-                SetVehicleMaxSpeed(cache.vehicle, 0.0)
-            end
-            debug("Greenzone rules off")
-            if UseCustomImage then updateUI(nil)
-            else Bridge.Notify.SendNotify(Zones[zoneType].exitMessage or "Out of Greenzone!", "info", 5000) end
+        inGreenzone = entering
+        if not restrictions.allowGuns and not exempt and cache.weapon then
+            SetCurrentPedWeapon(ped, entering and `WEAPON_UNARMED` or cache.weapon, true)
         end
+        if restrictions.allowGodMode and not restrictions.allowDeath then
+            SetEntityInvincible(ped, entering)
+        end
+        if cache.vehicle then
+            SetVehicleMaxSpeed(cache.vehicle, entering and (Zones[zoneType].maxSpeed or 0.0) or 0.0)
+        end
+        debug(entering and "Greenzone rules on" or "Greenzone rules off")
+        if UseCustomImage then updateUI(entering and "Greenzone" or nil)
+        else Bridge.Notify.SendNotify(Zones[zoneType][entering and "enterMessage" or "exitMessage"] or (entering and "In Greenzone!" or "Out of Greenzone!"), entering and "success" or "info", 5000) end
     elseif zoneType == "Redzone" then
         if entering then
-            inGreenzone = false  -- Ensure Greenzone flag is off
-            if cache.weapon then
-                SetCurrentPedWeapon(ped, cache.weapon, true)  -- Ensure weapon is usable
-            end
+            inGreenzone = false
+            if cache.weapon then SetCurrentPedWeapon(ped, cache.weapon, true) end
             SetEntityInvincible(ped, false)
-            if cache.vehicle then
-                SetVehicleMaxSpeed(cache.vehicle, 0.0)
-            end
+            if cache.vehicle then SetVehicleMaxSpeed(cache.vehicle, 0.0) end
             debug("Redzone rules on")
             if UseCustomImage then updateUI("Redzone")
             else Bridge.Notify.SendNotify(Zones[zoneType].enterMessage or "In Redzone!", "error", 5000) end
         else
-            inGreenzone = false  -- Ensure Greenzone flag is off
+            inGreenzone = false
             debug("Redzone rules off")
             if UseCustomImage then updateUI(nil)
             else Bridge.Notify.SendNotify(Zones[zoneType].exitMessage or "Out of Redzone!", "info", 5000) end
@@ -95,27 +66,24 @@ local function applyRules(zoneType, entering)
     end
 end
 
--- Sync zones
+-- Sync zones from server
 RegisterNetEvent('Jim_G_Green_Red_Zone:SyncZones', function(zoneData, customImage, debugOn, uiPos)
     Zones = zoneData
     UseCustomImage = customImage
     DebugMode = debugOn
     UIPosition = uiPos
 
-    debug("Got zones: " .. json.encode(Zones))
-    debug("Custom images: " .. tostring(UseCustomImage))
-    debug("Debug: " .. tostring(DebugMode))
-    debug("UI at x=" .. uiPos.x .. ", y=" .. uiPos.y)
     if DebugMode then
         Bridge.Notify.SendNotify("Zones are up and running!", "info", 5000)
     end
+
     for name, zone in pairs(ActiveZones) do
         if not Zones[name] or not Zones[name].enabled then
             zone:remove()
             ActiveZones[name] = nil
-            debug("Removed zone: " .. name)
         end
     end
+
     for name, data in pairs(Zones) do
         if data.enabled and not ActiveZones[name] then
             ActiveZones[name] = lib.zones.poly({
@@ -135,29 +103,26 @@ RegisterNetEvent('Jim_G_Green_Red_Zone:SyncZones', function(zoneData, customImag
     end
 end)
 
-
+-- Player loaded, request zones
 RegisterNetEvent('community_bridge:Client:OnPlayerLoaded', function()
     TriggerServerEvent('community_bridge:Server:OnPlayerLoaded', GetPlayerServerId(PlayerId()))
 end)
 
-
+-- React to vehicle changes
 lib.onCache('vehicle', function(value, oldValue)
-    if not value and oldValue then  -- Left a vehicle
-        debug("Left vehicle, resetting speed")
+    if not value and oldValue then
         SetVehicleMaxSpeed(oldValue, 0.0)
     end
 end)
 
-
+-- React to weapon changes
 lib.onCache('weapon', function(value, oldValue)
     if inGreenzone and Zones["Greenzone"] then
         local restrictions = Zones["Greenzone"].restrictions or {}
-        local job = Bridge.Framework.GetPlayerJob(cache.player or PlayerId())[1]
-        local exempt = restrictions.jobExceptions and restrictions.jobExceptions[job]
-        if not restrictions.allowGuns and not exempt and value then
-            local ped = cache.ped or PlayerPedId()
-            SetCurrentPedWeapon(ped, `WEAPON_UNARMED`, true)
-            debug("Forced unarmed in Greenzone")
+        local jobData = Bridge.Framework.GetPlayerJob(cache.player or PlayerId())
+        local job = type(jobData) == "string" and jobData or (jobData and (jobData[1] or jobData.name or jobData.job)) or "unknown"
+        if not restrictions.allowGuns and not (restrictions.jobExceptions and job and restrictions.jobExceptions[job]) and value then
+            SetCurrentPedWeapon(cache.ped or PlayerPedId(), `WEAPON_UNARMED`, true)
         end
     end
 end)
